@@ -2,8 +2,10 @@ package geneticMaterial;
 
 import java.util.Objects;
 
-public class MidiEvent {
+public class MyMidiEvent {
 
+    private boolean onThePlace = false;
+    private boolean inRightChromosome = false;
     /*
     Vreme kada se pojavljuje ovaj ton
      */
@@ -17,7 +19,7 @@ public class MidiEvent {
      */
     private int velocity;
 
-    public MidiEvent(long time, int note, int velocity) {
+    public MyMidiEvent(long time, int note, int velocity) {
         this.time = time;
         this.note = note;
         this.velocity = velocity;
@@ -55,8 +57,8 @@ public class MidiEvent {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof MidiEvent)) return false;
-        MidiEvent midiEvent = (MidiEvent) o;
+        if (!(o instanceof MyMidiEvent)) return false;
+        MyMidiEvent midiEvent = (MyMidiEvent) o;
         return time == midiEvent.time &&
                 note == midiEvent.note &&
                 velocity == midiEvent.velocity;
@@ -66,5 +68,21 @@ public class MidiEvent {
     public int hashCode() {
 
         return Objects.hash(time, note, velocity);
+    }
+
+    public boolean isOnThePlace() {
+        return onThePlace;
+    }
+
+    public void setOnThePlace(boolean onThePlace) {
+        this.onThePlace = onThePlace;
+    }
+
+    public boolean isInRightChromosome() {
+        return inRightChromosome;
+    }
+
+    public void setInRightChromosome(boolean inRightChromosome) {
+        this.inRightChromosome = inRightChromosome;
     }
 }

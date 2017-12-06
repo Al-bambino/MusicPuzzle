@@ -1,23 +1,27 @@
 package geneticMaterial;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Random;
 
 public class Chromosome {
 
     /**
      * TODO Za allMidiEvents smisli nacin za ucitavanje
+     * TODO DA li je static?
      */
-    private MidiEvent[] allMidiEvents;
+    private  ArrayList<MyMidiEvent> allMidiEvents;
     /**
      * Broj midiEvent-ova u hromozomu, odnosno broj midiEventova u trazenom hromozomu.
      * Trazeni hromozom -> deo originalne pesme koji zelimo da reprodukujemo.
      */
+
     private int chromosomeLength;
     /**
      * Jedan hromozom se sastoji od chromosomeLength midiEvent-ova
      */
-    private MidiEvent[] chromosomeMidiEvents;
+    private MyMidiEvent[] chromosomeMidiEvents;
     /**
      * TODO Proveriti da li je potrebno
      */
@@ -26,24 +30,27 @@ public class Chromosome {
      * Sanse da hromozom prezivi
      */
     private double fitness;
-
-    public Chromosome(int length) {
-        chromosomeMidiEvents = new MidiEvent[length];
+    public int numOfSame;
+    public Chromosome(int length,  ArrayList<MyMidiEvent>pool) {
+        chromosomeMidiEvents = new MyMidiEvent[length];
         currentIndex = -1;
         chromosomeLength = length;
         fitness = -1;
+        allMidiEvents = pool;
     }
 
-    public Chromosome(MidiEvent[] chromosomeMidiEvents) {
+    public Chromosome(MyMidiEvent[] chromosomeMidiEvents, ArrayList<MyMidiEvent> pool) {
         this.chromosomeMidiEvents = chromosomeMidiEvents;
         chromosomeLength = chromosomeMidiEvents.length;
+        currentIndex = chromosomeLength - 1;
         fitness = -1;
+        allMidiEvents = pool;
     }
 
     /**
-     * TODO Da li treba??
+     * Dodaje midiEventove u hromozom.
      */
-    public boolean addMidiEvent(MidiEvent midiEvent){
+    public boolean addMidiEvent(MyMidiEvent midiEvent){
         if(midiEvent == null || currentIndex == chromosomeMidiEvents.length - 1 ) return false;
         chromosomeMidiEvents[++currentIndex] = midiEvent;
         return true;
@@ -54,45 +61,107 @@ public class Chromosome {
      * Ukoliko midiEventovi nisu lepo ucitani metoda postavlja chromosomeMidiEvents na null vrednost.
      * TODO napraviti exeption za nepravilan unos midiEventova
      */
-    public void makeItRandom(){
-        if(allMidiEvents.length == 0){
-            System.err.println("Nema ucitanih midiEventova");
+    public void makeItRandom() {
+        if(allMidiEvents.size() == 0) {
+            System.err.println("Nema učitanih midiEventova");
             chromosomeMidiEvents = null;
             return;
         }
-        Random random = new Random(allMidiEvents.length - 1);
+        Random random = new Random();
         for (int i = 0; i < chromosomeLength; i++) {
-            chromosomeMidiEvents[i] = allMidiEvents[random.nextInt()];
+            chromosomeMidiEvents[i] = allMidiEvents.get(random.nextInt(allMidiEvents.size() - 1));
         }
     }
 
     /**
      * Metoda racuna fitnes za hromozom tako sto uporedjuje midiEvetnove da li su isti.
-     * Izrazava se u procentima. Trazeni hromozom ce imati fitnes 1.0.
-     * U ovom trenutku ne radim nikakvu optimizaciju, najporstija calculateFitness metoda.
+     * Izrazava se u broju istih hromozoma na 4 stepen. Dizem na 4 kako bi razlika izmedju dva vrlo slicna bila sto veca.
      * @param target -> hromozom koji trazimo (deo pesme)
      */
-    public void calculateFitness(Chromosome target) {
-        int numOfSame = 0;
+    public double calculateFitness(Chromosome target) {
+        numOfSame = 0;
+        int numOfContains = 0;
         for(int i = 0; i < chromosomeLength; i++) {
-            if(chromosomeMidiEvents[i].equals(target.getChromosomeMidiEvents()[i]))
+            if( chromosomeMidiEvents[i].equals(target.getChromosomeMidiEvents()[i])) {
                 numOfSame++;
+                chromosomeMidiEvents[i].setOnThePlace(true);
+            } else {
+                for (int j = 0; j < chromosomeLength; j++) {
+                    if( chromosomeMidiEvents[i].equals(target.getChromosomeMidiEvents()[j])){
+                        numOfContains++;
+                      //  chromosomeMidiEvents[i].setInRightChromosome(true);
+                    }
+                }
+            }
         }
-        fitness = (numOfSame * 1.0) / chromosomeLength;
+        fitness = Math.pow(2.0, numOfSame) + numOfContains ;
+        return fitness;
+    }
+
+    /**
+     * Metoda koja pravi novi hromozom tako sto ukrsta genetski materijal od random tacke sa prosledjenim hromozomom.
+     * @param secondParent -> hromozom sa kojim se ukrsta genetski materijal.
+     * @return novi hromozom.
+     */
+    public Chromosome makeLove(Chromosome secondParent, Chromosome target) {
+        Random random = new Random();
+        int n = random.nextInt(chromosomeLength - 1);
+        Chromosome child = new Chromosome(chromosomeLength, allMidiEvents);
+        for(int i = 0; i < chromosomeLength; i++) {
+           /*if(this.chromosomeMidiEvents[i].isOnThePlace())
+                childMidiEvents[i] = this.chromosomeMidiEvents[i];
+            else if(secondParent.chromosomeMidiEvents[i].isOnThePlace())
+                childMidiEvents[i] = secondParent.chromosomeMidiEvents[i];
+            else*/
+            if (i < n)  {
+                this.chromosomeMidiEvents[i].setOnThePlace(false);
+                child.addMidiEvent(this.chromosomeMidiEvents[i]);
+            }
+            else  {
+                secondParent.chromosomeMidiEvents[i].setOnThePlace(false);
+                child.addMidiEvent(secondParent.chromosomeMidiEvents[i]);
+            }
+        }
+        return child;
+    }
+
+    /**
+     * Proverava da li ce svaki deo hromozoma mutirati. Ukoliko je random broj manji od mutationRate onda se taj hromozom
+     * menja (mutira) sa nekim iz allMidiEvents.
+     * @param mutationRate -> procenat mutacije izrazen u double.
+     */
+    public void mutate(double mutationRate) {
+        Random random = new Random();
+        for(int i = 0; i < chromosomeLength; i++){
+            if(chromosomeMidiEvents[i].isOnThePlace()) continue;
+            if(random.nextDouble() <= mutationRate){
+                int indexOfRandomMidiEvent = random.nextInt(allMidiEvents.size() - 1);
+                MyMidiEvent randomMidiEvent = allMidiEvents.get(indexOfRandomMidiEvent);
+                chromosomeMidiEvents[i] = randomMidiEvent;
+            }
+        }
 
     }
 
-    public Chromosome makeLove(Chromosome secondParent) {
-        /**
-         * TODO
-         */
-        return null;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Chromosome)) return false;
+        Chromosome that = (Chromosome) o;
+        if(chromosomeLength != that.chromosomeLength) return false;
+        for(int i = 0; i < chromosomeLength; i++) {
+            if(!this.chromosomeMidiEvents[i].equals(that.chromosomeMidiEvents[i]))
+                return false;
+        }
+        return true;
     }
 
-    private void mutate() {
-        /**
-         * TODO
-         */
+    @Override
+    public int hashCode() {
+
+        int result = Objects.hash(chromosomeLength);
+        result = 31 * result + Arrays.hashCode(chromosomeMidiEvents);
+        return result;
     }
 
     @Override
@@ -110,22 +179,23 @@ public class Chromosome {
         }
         return "Hromozom: " + "\n" +
                 sb.toString() +
-                "Broj pogodjenih hromozoma=" + (int)fitness * chromosomeLength;
+                "Broj pogodjenih hromozoma=" + numOfSame;
     }
 
-    public MidiEvent[] getChromosomeMidiEvents() {
+
+    public MyMidiEvent[] getChromosomeMidiEvents() {
         return chromosomeMidiEvents;
     }
 
-    public void setChromosomeMidiEvents(MidiEvent[] chromosomeMidiEvents) {
+    public void setChromosomeMidiEvents(MyMidiEvent[] chromosomeMidiEvents) {
         this.chromosomeMidiEvents = chromosomeMidiEvents;
     }
 
-    public MidiEvent[] getAllMidiEvents() {
+    public ArrayList<MyMidiEvent> getAllMidiEvents() {
         return allMidiEvents;
     }
 
-    public void setAllMidiEvents(MidiEvent[] allMidiEvents) {
+    public void setAllMidiEvents(ArrayList<MyMidiEvent> allMidiEvents) {
         this.allMidiEvents = allMidiEvents;
     }
 
