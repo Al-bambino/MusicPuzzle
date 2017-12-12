@@ -13,11 +13,17 @@ public class Chromosome {
      */
     private  ArrayList<MyMidiEvent> allMidiEvents;
     /**
-     * Broj midiEvent-ova u hromozomu, odnosno broj midiEventova u trazenom hromozomu.
+     * Broj tonova u hromozomu (jednak je broju tonova u trazenom hromozomu).
      * Trazeni hromozom -> deo originalne pesme koji zelimo da reprodukujemo.
      */
-
     private int chromosomeLength;
+
+    /** Jedan hromozom se sastoji od chromosomeLength tonova. **/
+    private  MyTone[] chromosomeTones;
+    /**
+     * Bazen sa svim tonovima iz midi fajla koji je prosledjen.
+     */
+    private  ArrayList<MyTone> tonesPool;
     /**
      * Jedan hromozom se sastoji od chromosomeLength midiEvent-ova
      */
@@ -31,116 +37,124 @@ public class Chromosome {
      */
     private double fitness;
     public int numOfSame;
-    public Chromosome(int length,  ArrayList<MyMidiEvent>pool) {
-        chromosomeMidiEvents = new MyMidiEvent[length];
+
+    /**
+     * Pravi novi hromozom sa praznim nizom genetskog materijala(tonova). Fitnes hromozoma se default-no postavlja na -1.
+     * @param length -> duzina hromozoma (koliko tonova ce imati svaki hromozom)
+     * @param pool -> bazen sa svim tonovima ucitanih iz midi fajla. {@link Population#fillTonesPool(String)}
+     */
+    public Chromosome(int length,  ArrayList<MyTone> pool) {
+        chromosomeTones = new MyTone[length];
         currentIndex = -1;
         chromosomeLength = length;
         fitness = -1;
-        allMidiEvents = pool;
+        tonesPool = pool;
     }
 
-    public Chromosome(MyMidiEvent[] chromosomeMidiEvents, ArrayList<MyMidiEvent> pool) {
+    public Chromosome(MyMidiEvent[] chromosomeMidiEvents, ArrayList<MyTone> pool) {
         this.chromosomeMidiEvents = chromosomeMidiEvents;
         chromosomeLength = chromosomeMidiEvents.length;
         currentIndex = chromosomeLength - 1;
         fitness = -1;
-        allMidiEvents = pool;
+        tonesPool = pool;
     }
-
     /**
-     * Dodaje midiEventove u hromozom.
+     * Dodaje tonove u hromozom
+     * @param tone -> ton koji ce biti dodat.
+     * @return true ukoliko je bilo mesta u hromozomu i ukoliko nije prosledjeni ton nije bio null.
      */
-    public boolean addMidiEvent(MyMidiEvent midiEvent){
-        if(midiEvent == null || currentIndex == chromosomeMidiEvents.length - 1 ) return false;
-        chromosomeMidiEvents[++currentIndex] = midiEvent;
+    public boolean addTones(MyTone tone) {
+        if (tone == null || currentIndex == chromosomeTones.length - 1) return false;
+        chromosomeTones[++currentIndex] = tone;
         return true;
     }
 
     /**
-     * Hromozomu dodaje random midiEventove iz bazena svih midiEventovima date kompozicije.
-     * Ukoliko midiEventovi nisu lepo ucitani metoda postavlja chromosomeMidiEvents na null vrednost.
+     * Hromozomu dodaje random tonove iz bazena svih tonova.
+     * Ukoliko tonovi nisu lepo ucitani metoda postavlja chromosomeTones na null vrednost.
      * TODO napraviti exeption za nepravilan unos midiEventova
      */
     public void makeItRandom() {
-        if(allMidiEvents.size() == 0) {
+        if(tonesPool.size() == 0) {
             System.err.println("Nema učitanih midiEventova");
-            chromosomeMidiEvents = null;
+            chromosomeTones = null;
             return;
         }
         Random random = new Random();
         for (int i = 0; i < chromosomeLength; i++) {
-            chromosomeMidiEvents[i] = allMidiEvents.get(random.nextInt(allMidiEvents.size() - 1));
+            int randomIndex = random.nextInt(tonesPool.size() - 1);
+            chromosomeTones[i] = tonesPool.get(randomIndex);
         }
     }
 
     /**
-     * Metoda racuna fitnes za hromozom tako sto uporedjuje midiEvetnove da li su isti.
-     * Izrazava se u broju istih hromozoma na 4 stepen. Dizem na 4 kako bi razlika izmedju dva vrlo slicna bila sto veca.
+     * Metoda racuna fitnes za hromozom tako sto uporedjuje tonove.
+     * Izrazava se u broju istih tonova na 2 stepen + brpj tonova koji se pojavljuju i u targetu.
      * @param target -> hromozom koji trazimo (deo pesme)
      */
     public double calculateFitness(Chromosome target) {
         numOfSame = 0;
         int numOfContains = 0;
         for(int i = 0; i < chromosomeLength; i++) {
-            if( chromosomeMidiEvents[i].equals(target.getChromosomeMidiEvents()[i])) {
+            if(this.chromosomeTones[i].equals(target.chromosomeTones[i])) {
                 numOfSame++;
-                chromosomeMidiEvents[i].setOnThePlace(true);
-            } else {
-                for (int j = 0; j < chromosomeLength; j++) {
-                    if( chromosomeMidiEvents[i].equals(target.getChromosomeMidiEvents()[j])){
-                        numOfContains++;
-                      //  chromosomeMidiEvents[i].setInRightChromosome(true);
-                    }
+                chromosomeTones[i].setOnThePlace(true);
+                continue;
+            }
+            for (int j = 0; j < chromosomeLength; j++) {
+                if( chromosomeTones[i].equals(target.chromosomeTones[j])){
+                    numOfContains++;
+                    //  chromosomeMidiEvents[i].setInRightChromosome(true);
                 }
             }
+
         }
-        fitness = Math.pow(2.0, numOfSame) + numOfContains ;
+        fitness = Math.pow(2.0, numOfSame) + numOfContains;
         return fitness;
     }
 
     /**
      * Metoda koja pravi novi hromozom tako sto ukrsta genetski materijal od random tacke sa prosledjenim hromozomom.
-     * @param secondParent -> hromozom sa kojim se ukrsta genetski materijal.
+     * @param father -> hromozom sa kojim se ukrsta genetski materijal.
+     * @param target -> TODO naporaviti bolje ukrstanje
      * @return novi hromozom.
      */
-    public Chromosome makeLove(Chromosome secondParent, Chromosome target) {
+    public Chromosome makeLove(Chromosome father, Chromosome target) {
         Random random = new Random();
-        int n = random.nextInt(chromosomeLength - 1);
-        Chromosome child = new Chromosome(chromosomeLength, allMidiEvents);
+        int rundomNum = random.nextInt(chromosomeLength - 1);
+        Chromosome child = new Chromosome(chromosomeLength, tonesPool);
         for(int i = 0; i < chromosomeLength; i++) {
            /*if(this.chromosomeMidiEvents[i].isOnThePlace())
                 childMidiEvents[i] = this.chromosomeMidiEvents[i];
-            else if(secondParent.chromosomeMidiEvents[i].isOnThePlace())
-                childMidiEvents[i] = secondParent.chromosomeMidiEvents[i];
+            else if(father.chromosomeMidiEvents[i].isOnThePlace())
+                childMidiEvents[i] = father.chromosomeMidiEvents[i];
             else*/
-            if (i < n)  {
-                this.chromosomeMidiEvents[i].setOnThePlace(false);
-                child.addMidiEvent(this.chromosomeMidiEvents[i]);
+            if (i < rundomNum)  {
+                this.chromosomeTones[i].setOnThePlace(false);
+                child.addTones(this.chromosomeTones[i]);
             }
             else  {
-                secondParent.chromosomeMidiEvents[i].setOnThePlace(false);
-                child.addMidiEvent(secondParent.chromosomeMidiEvents[i]);
+                father.chromosomeTones[i].setOnThePlace(false);
+                child.addTones(father.chromosomeTones[i]);
             }
         }
         return child;
     }
 
     /**
-     * Proverava da li ce svaki deo hromozoma mutirati. Ukoliko je random broj manji od mutationRate onda se taj hromozom
-     * menja (mutira) sa nekim iz allMidiEvents.
+     * Proverava da li ce svaki deo hromozoma mutirati. Ukoliko je random broj manji od mutationRate onda se taj ton
+     * menja (mutira) sa nekim iz tonesPool.
+     * Ukoliko se ton nalazi na pravom mestu u hromozomu on nece mutirati.
      * @param mutationRate -> procenat mutacije izrazen u double.
      */
     public void mutate(double mutationRate) {
         Random random = new Random();
-        for(int i = 0; i < chromosomeLength; i++){
-            if(chromosomeMidiEvents[i].isOnThePlace()) continue;
-            if(random.nextDouble() <= mutationRate){
-                int indexOfRandomMidiEvent = random.nextInt(allMidiEvents.size() - 1);
-                MyMidiEvent randomMidiEvent = allMidiEvents.get(indexOfRandomMidiEvent);
-                chromosomeMidiEvents[i] = randomMidiEvent;
-            }
+        for(int i = 0; i < chromosomeLength; i++) {
+            if(chromosomeTones[i].isOnThePlace() || random.nextDouble() > mutationRate) continue;
+            int randomToneIndex = random.nextInt(tonesPool.size() - 1);
+            MyTone randomTone = tonesPool.get(randomToneIndex);
+            chromosomeTones[i] = randomTone;
         }
-
     }
 
     @Override
@@ -150,7 +164,7 @@ public class Chromosome {
         Chromosome that = (Chromosome) o;
         if(chromosomeLength != that.chromosomeLength) return false;
         for(int i = 0; i < chromosomeLength; i++) {
-            if(!this.chromosomeMidiEvents[i].equals(that.chromosomeMidiEvents[i]))
+            if(!this.chromosomeTones[i].equals(that.chromosomeTones[i]))
                 return false;
         }
         return true;
@@ -160,7 +174,7 @@ public class Chromosome {
     public int hashCode() {
 
         int result = Objects.hash(chromosomeLength);
-        result = 31 * result + Arrays.hashCode(chromosomeMidiEvents);
+        result = 31 * result + Arrays.hashCode(chromosomeTones);
         return result;
     }
 
@@ -169,17 +183,17 @@ public class Chromosome {
         StringBuilder sb = new StringBuilder();
         for(int i = 0; i < chromosomeLength; i++) {
             sb.append(i + 1);
-            sb.append(".midiEvent: @");
-            sb.append(chromosomeMidiEvents[i].getTime());
-            sb.append(" ključ: ");
-            sb.append(chromosomeMidiEvents[i].getNote());
+            sb.append(".pocinje: @");
+            sb.append(chromosomeTones[i].getStart());
+            sb.append(" nota: ");
+            sb.append(chromosomeTones[i].getNote());
             sb.append(" na jačini: ");
-            sb.append(chromosomeMidiEvents[i].getVelocity());
+            sb.append(chromosomeTones[i].getVelocity());
             sb.append('\n');
         }
         return "Hromozom: " + "\n" +
                 sb.toString() +
-                "Broj pogodjenih hromozoma=" + numOfSame;
+                "Broj pogodjenih hromozoma = " + numOfSame;
     }
 
 
@@ -193,6 +207,22 @@ public class Chromosome {
 
     public ArrayList<MyMidiEvent> getAllMidiEvents() {
         return allMidiEvents;
+    }
+
+    public MyTone[] getChromosomeTones() {
+        return chromosomeTones;
+    }
+
+    public void setChromosomeTones(MyTone[] chromosomeTones) {
+        this.chromosomeTones = chromosomeTones;
+    }
+
+    public ArrayList<MyTone> getTonesPool() {
+        return tonesPool;
+    }
+
+    public void setTonesPool(ArrayList<MyTone> tonesPool) {
+        this.tonesPool = tonesPool;
     }
 
     public void setAllMidiEvents(ArrayList<MyMidiEvent> allMidiEvents) {

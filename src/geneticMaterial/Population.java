@@ -4,7 +4,7 @@ import javax.sound.midi.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.io.FileWriter;
 import java.util.Random;
 
 public class Population {
@@ -13,25 +13,24 @@ public class Population {
      */
     private double mutationRate;
     /**
-     * Trenutna populacija
+     * Populacija koju cine jedinke(hromozomi). Jedna populacija je jedna generacija zapravo.
      */
     private Chromosome[] population;
     /**
-     * Deo pesme koji treba da dobijemo ovom populacijom
-     * TODO primeniti na celu pesmu
+     * Deo pesme koji treba da nadjemo ovom populacijom.
      */
     private Chromosome target;
     /**
      * Niz sa svim hromozomima popunjen po verovatnoci da prezivi (fitnessu)
      * @see {@link #naturalSelection()}
      */
-    private ArrayList<Chromosome> possbilityPool = new ArrayList<>();
+    private ArrayList<Chromosome> possibilityPool = new ArrayList<>();
     /**
-     * Trenutni broj generacije
+     * Redni broj generacije
      */
     private int generationNumber;
     /**
-     * Velicina populacije -> broj hromozoma u generaciji
+     * Velicina populacije -> broj jedinki(hromozoma) u generaciji
      */
     private int populationSize;
     /**
@@ -39,30 +38,38 @@ public class Population {
      */
     private Chromosome ourBest;
     /**
-     * Proverava da li imamo hromozom koji se potouno poklapa sa targetom
+     * Proverava da li imamo hromozom koji se potpuno poklapa sa targetom
      */
     private  boolean weHaveAWinner;
+    /** Bazen sa svim midiEventovima **/
     private ArrayList<MyMidiEvent> midiPool = new ArrayList<>();
-    private ArrayList<MyMidiEvent> sortedAllMidiPool = new ArrayList<>();
-
+    /** Bazen sa svim tonovima ucitanih iz midi fajla. **/
+    private ArrayList<MyTone> tonePool = new ArrayList<>();
     private int chromosomeLength;
     /**
-     * Pravi novu populaciju, popunjenu random hromozomima.
+     * Pravi novu populaciju, popunjenu random hromozomima. Takdoje, popunjava tonePool svim tonovima.
      * @param mutationRate -> šansa da se javi mutacija u hromozomu, posle ukraštanja.
      * @param populationSize -> veličina populacije, broj jedinki (hromozoma) koji hocemo da imamo.
-     * @param targetLength -> duzian hromozoma koji tražimo (dela pesme).
+     * @param targetStart -> redni broj tona od kog pocinje target (Pr. zelimo da nadjemo prvih 10 tonova,
+     *                    targetStart = 0.
+     * @param targetLength -> duzina hromozoma koji tražimo (broj tonova u hromzomu).
      * @param filePath -> putanja do midi fajla.
      */
-    public Population(double mutationRate, int populationSize, int targetLength, String filePath) {
+    public Population(double mutationRate, int populationSize, int targetStart, int targetLength, String filePath) {
         this.mutationRate = mutationRate;
         this.populationSize = populationSize;
         chromosomeLength = targetLength;
         population = new Chromosome[populationSize];
-        fillMidiPool(filePath);
-        target = makeTarget(targetLength);
+        fillTonesPool(filePath);
+        target = makeTarget(targetStart, targetLength);
         makeRandomGeneration(targetLength);
     }
-    private void fillMidiPool(String filePath){
+
+    /**
+     * TODO poboljsati metodu, izbaciti mozda {@link #makeTones(ArrayList)}
+     * @param filePath
+     */
+    private void fillTonesPool(String filePath){
         Sequence sequence = null;
         try {
             sequence = MidiSystem.getSequence(new File(filePath));
@@ -81,46 +88,74 @@ public class Population {
                     if(shortMessage.getCommand() == 144 || shortMessage.getCommand() == 128) {
                             MyMidiEvent myMidiEvent = new MyMidiEvent(midiEvent.getTick(), shortMessage.getData1(), shortMessage.getData2());
                             midiPool.add(myMidiEvent);
-                            sortedAllMidiPool.add(myMidiEvent);
                     }
                 }
             }
         }
-        Collections.shuffle(midiPool);
+        tonePool = makeTones(midiPool);
     }
 
+    /**
+     * Pravi tonove od midi eventova. Prolazi kroz sve midiEventove i za svaki proverava da li je velocity 0,
+     * ako jeste onda je to taj tick(time) oznacava kraj svrianja te note. Razlika izmedju dva eventa je duzina trajanja tona.
+     * @see {@link MyTone}
+     * @param midiPool -> Lista svih midiEventova, poredjanih po redosledu.
+     * @return -> Listu tonova koji se pojavljuju u prosledjenoj kompoziciji.
+     */
+    private ArrayList<MyTone> makeTones(ArrayList<MyMidiEvent> midiPool ) {
+        ArrayList<MyTone> tonesPool = new ArrayList<>();
+        for(MyMidiEvent startMidiEvent : midiPool) {
+            if (startMidiEvent.getVelocity() == 0) continue;
+            int index = midiPool.indexOf(startMidiEvent);
+            for(int i = index + 1; i < midiPool.size(); i++) {
+                MyMidiEvent endMidiEvent = midiPool.get(i);
+                if( endMidiEvent.getVelocity() == 0 &&
+                        startMidiEvent.getNote() == endMidiEvent.getNote()) {
+                    int note = startMidiEvent.getNote();
+                    int velocity = startMidiEvent.getVelocity();
+                    long start = startMidiEvent.getTime();
+                    long length = endMidiEvent.getTime() - startMidiEvent.getTime();
+                    MyTone myTone = new MyTone(length, start, velocity, note);
+                    tonesPool.add(myTone);
+                    break;
+                }
+
+            }
+        }
+        return tonesPool;
+    }
 
     /**
-     * TODO uradi ovo za vise traka
-     * @param targetLength
-     * @return
+     * Pravi objekat kalse {@link Chromosome} koji ce predstavljati trazeni hromozm.
+     * TODO uraditi za vise traka?
+     * @param targetLength -> duzina hromzoma
+     * @return -> hromozom koji sadrzi targetLength tonova pocevsi od targetStart-og tona u komopoziciji.
      */
-    private Chromosome makeTarget(int targetLength) {
-        Chromosome target = new Chromosome(targetLength, midiPool);
-        for(int i = 0; i < targetLength; i++) {
-            target.addMidiEvent(sortedAllMidiPool.get(i));
-        }
+    private Chromosome makeTarget(int targetStart, int targetLength) {
+        Chromosome target = new Chromosome(targetLength, tonePool);
+        for(int i = 0; i < targetLength; i++)
+            target.addTones(tonePool.get(i + targetStart));
         return target;
     }
     /**
-     * Pravi generaciju praznih hromozoma, i potom zove metodu makeItRandom za svaki hromozom,
-     * kako bi on na random nacin odbrao svoje delove (midiEvent-ove u ovom slucaju).
+     * Pravi generaciju praznih hromozoma, i potom zove metodu {@link Chromosome#makeItRandom()} za svaki hromozom,
+     * kako bi on na random nacin odbrao svoj genetski materijal (tonove u ovom slucaju).
      * Takdoje, buduci da se samo prvi put generacija bira na random nacin, redni broj generacije se postavlja na 0.
-     * @param chromosomeLength -> duzina hromozoma(dela pesme koji treba da prepoznamo).
+     * @param chromosomeLength -> duzina hromozoma (dela pesme koji treba da prepoznamo).
      * @see {@link Chromosome#makeItRandom()}
      */
     private void makeRandomGeneration(int chromosomeLength) {
-        for(int i = 0; i < populationSize; i++){
-            population[i] = new Chromosome(chromosomeLength, midiPool);
+        for(int i = 0; i < populationSize; i++) {
+            population[i] = new Chromosome(chromosomeLength, tonePool);
             population[i].makeItRandom();
             generationNumber = 0;
         }
     }
-
     /**
      * Metoda koja racuna fitnes svakog hromozoma u populaciji, i proverava da li se pri tom racunanju promenio
      * nas najbolji hromozom.
-     * Metodi calculateFitness se proseldjuje parametar target, kako bi se svaki hromozom uporedio sa ciljnim hromozomom.
+     * Metodi {@link Chromosome#calculateFitness(Chromosome)} se proseldjuje parametar target,
+     * kako bi se svaki hromozom uporedio sa ciljnim hromozomom.
      * @see  {@link Chromosome#calculateFitness(Chromosome)}
      */
     public void calculateFitness() {
@@ -143,20 +178,17 @@ public class Population {
     }
 
     /**
-     * Metoda koja pravi bazen za odabir roditelja.
+     * Metoda koja pravi "bazen" sa svim roditeljima. Roditelji unutra su skalirani po fitnesu pa potom ubacivani.
      * Sto veci fitnes ima hromozom to ce se vise puta naci u bazenu(sesiru za izvalcenje),
      * te ce imati i vece sanse da bude izabran za ukrstanje.
-     * Fitnes se mnozi sa 10 cisto da bi se napravio veci broj primeraka hrommozoma. Broj sa kojim se mnozi je proizvoljan.
-     * TODO Proveriti da li treba "normalizovti" naci max pa onda....
+     * TODO Proveriti da li treba "normalizovti" naci max pa onda.... Ili naci bolje resenje.
      */
     public void naturalSelection() {
-        possbilityPool.clear();
-
+        possibilityPool.clear();
         for(int i = 0; i < populationSize; i++) {
             int n = (int)(population[i].getFitness());
-            //System.out.println("n " + n);
             for(int j = 0; j < n; j++)
-                possbilityPool.add(population[i]);
+                possibilityPool.add(population[i]);
         }
     }
 
@@ -164,17 +196,18 @@ public class Population {
      * Metoda koja pravi novu generaciju hromozoma. Uzima dva random roditelja iz possbilityPool-a i ukrsta ih.
      * Dobijeni hromozom se dodaje u novu generaciju. To radimo populationSize puta, kako bi svaka generacija imala
      * isti broj hromozoma.
-     * @see {@link #possbilityPool}
+     * @see {@link #possibilityPool}
+     * TODO izbaciti ovo newGeneration?
      */
     public void makeNewGeneration() {
         Chromosome[] newGeneration = new Chromosome[populationSize];
         Random random = new Random();
         for(int i = 0; i < populationSize; i++) {
-            int firstParentIndex = random.nextInt(possbilityPool.size() - 1);
-            int secondParentIndex = random.nextInt(possbilityPool.size() - 1);
-            Chromosome firstParent = possbilityPool.get(firstParentIndex);
-            Chromosome secondParent = possbilityPool.get(secondParentIndex);
-            Chromosome child = firstParent.makeLove(secondParent, target);
+            int indexOfMother = random.nextInt(possibilityPool.size() - 1);
+            int indexOfFather = random.nextInt(possibilityPool.size() - 1);
+            Chromosome mother = possibilityPool.get(indexOfMother);
+            Chromosome father = possibilityPool.get(indexOfFather);
+            Chromosome child = mother.makeLove(father, target);
             child.mutate(mutationRate);
             newGeneration[i] = child;
         }
@@ -202,16 +235,40 @@ public class Population {
         return target;
     }
 
+    public ArrayList<MyMidiEvent> getMidiPool() {
+        return midiPool;
+    }
+
+    public void setMidiPool(ArrayList<MyMidiEvent> midiPool) {
+        this.midiPool = midiPool;
+    }
+
+    public ArrayList<MyTone> getTonePool() {
+        return tonePool;
+    }
+
+    public void setTonePool(ArrayList<MyTone> tonePool) {
+        this.tonePool = tonePool;
+    }
+
+    public int getChromosomeLength() {
+        return chromosomeLength;
+    }
+
+    public void setChromosomeLength(int chromosomeLength) {
+        this.chromosomeLength = chromosomeLength;
+    }
+
     public void setTarget(Chromosome target) {
         this.target = target;
     }
 
     public ArrayList<Chromosome> getPossbilityPool() {
-        return possbilityPool;
+        return possibilityPool;
     }
 
     public void setPossbilityPool(ArrayList<Chromosome> possbilityPool) {
-        this.possbilityPool = possbilityPool;
+        this.possibilityPool = possbilityPool;
     }
 
     public int getGenerationNumber() {

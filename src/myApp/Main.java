@@ -10,6 +10,7 @@ import javax.sound.midi.MidiSystem;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 
 public class Main {
     public static final int NOTE_ON = 0x90;
@@ -17,28 +18,37 @@ public class Main {
     public static final String[] NOTE_NAMES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
         public static void main(String[] args) {
 
-            //System.out.println(c);
+            long startTime = System.nanoTime();
 
-            Population p = new Population(0.1, 1000,  10, "D:\\Downloads\\mzAllaTurca.mid");
-            System.out.println(p.getTarget());
-            int l = 0;
-            while(!p.isWeHaveAWinner() ) {
-                p.calculateFitness();
-                p.naturalSelection();
-                p.makeNewGeneration();
-                System.out.println(p.getGenerationNumber() + ". " +p.getOurBest());
+
+            ArrayList<Chromosome> our = new ArrayList<>();
+            for(int i = 0; i < 10; i++) {
+                Population p = new Population(0.1, 1000, i * 10,   10, "D:\\Downloads\\mzAllaTurca.mid");
+               // System.out.println(p.getTarget());
+                int l = 0;
+                while (!p.isWeHaveAWinner()) {
+                    p.calculateFitness();
+                    p.naturalSelection();
+                    p.makeNewGeneration();
+                    //System.out.println(p.getGenerationNumber() + ". " + p.getOurBest());
+                }
+                our.add(p.getOurBest());
             }
 
             System.out.println();
-            for(int i =0; i < p.getTarget().getChromosomeLength(); i++)
-            System.out.println(p.getOurBest().getChromosomeMidiEvents()[i].isOnThePlace());
+            /*for(int i =0; i < p.getTonePool().size(); i++)
+            System.out.println(p.getTonePool().get(i));*/
 
-       /*  for(Chromosome chromosome : p.getPopulation()) {
-             System.out.println(chromosome);
-         }*/
+             for(Chromosome chromosome : our) {
+                 System.out.println(chromosome);
+             }
+
+            long endTime = System.nanoTime();
+            System.out.println("Potroseno vreme "+(endTime - startTime) / 1000000000.0 + " s");
 
 
-        /*FileWriter fw = null;
+         /*
+        FileWriter fw = null;
         Sequence sequence = null;
         try {
            fw = new FileWriter(new File("D:\\Downloads\\reci.txt"));
@@ -57,7 +67,7 @@ public class Main {
             System.out.println();
             for (int i=0; i < track.size(); i++) {
                 javax.sound.midi.MidiEvent event = track.get(i);
-                System.out.print("@" + event.getTick() + " ");
+
                 MidiMessage message = event.getMessage();
 
 
@@ -73,7 +83,7 @@ public class Main {
                         String noteName = NOTE_NAMES[note];
                         int velocity = sm.getData2();
                         try {
-                            fw.write("Note on, " + noteName + octave + " key=" + key + " velocity: " + velocity + "\n");
+                            fw.write("@" + event.getTick() + " Note on, " + noteName + octave + " key=" + key + " velocity: " + velocity + "\n");
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -94,6 +104,7 @@ public class Main {
             }
 
             System.out.println();
-        }*/
+        }
+        */
     }
 }
